@@ -645,28 +645,70 @@ void modem_cmd_handler_tx_unlock(struct modem_cmd_handler *handler)
 	k_sem_give(&data->sem_tx_lock);
 }
 
-int modem_cmd_handler_init(struct modem_cmd_handler *handler,
-			   struct modem_cmd_handler_data *data)
+int modem_cmd_handler_init(struct modem_cmd_handler *handler, struct modem_cmd_handler_data *data,
+			      char *match_buf, size_t match_buf_len, struct net_buf_pool *buf_pool,
+			      k_timeout_t alloc_timeout, const char *eol, void *user_data)
 {
-	if (!handler || !data) {
+	/* Verify arguments */
+	if (!handler || !data || !match_buf || !match_buf_len || !buf_pool) {
 		return -EINVAL;
 	}
 
-	if (!data->match_buf_len) {
-		return -EINVAL;
-	}
+	/* Assign data to command handler */
+	handler->cmd_handler_data = data;
 
-	if (data->eol == NULL) {
+	/* Assign command process implementation to command handler */
+	handler->process = cmd_handler_process;
+
+	/* Store arguments */
+	data->match_buf = match_buf;
+	data->match_buf_len = match_buf_len;
+	data->buf_pool = buf_pool;
+	data->alloc_timeout = alloc_timeout;
+
+	/* Process end of line */
+	if (!eol) {
+		data->eol = NULL;
 		data->eol_len = 0;
 	} else {
+		data->eol = eol;
 		data->eol_len = strlen(data->eol);
 	}
 
-	handler->cmd_handler_data = data;
-	handler->process = cmd_handler_process;
+	/* Store optional user data */
+	data->user_data = user_data;
 
+	/* Initialize command handler data members */
 	k_sem_init(&data->sem_tx_lock, 1, 1);
 	k_sem_init(&data->sem_parse_lock, 1, 1);
-
 	return 0;
+}
+
+int modem_cmd_handler_init_cmds(struct modem_cmd_handler *handler,
+			      const struct modem_cmd *response_cmds, size_t response_cmds_len,
+			      const struct modem_cmd *unsol_cmds, size_t unsol_cmds_len)
+{
+	/* Verify arguments */
+	if (!handler || (response_cmds && 0 == response_cmds_len)
+		|| (unsol_cmds && 0 == unsol_cmds_len)) {
+		return -EINVAL;
+	}
+
+	/* Variables */
+	struct modem_cmd_handler_data *data =
+		(struct modem_cmd_handler_data *)(handler->cmd_handler_data);
+
+	/* Store modem commands */
+	data->cmds[CMD_RESP] = response_cmds;
+	data->cmds_len[CMD_RESP] = response_cmds_len;
+	data->cmds[CMD_UNSOL] = unsol_cmds;
+	data->cmds_len[CMD_UNSOL] = unsol_cmds_len;
+	return 0;
+}
+
+void modem_cmd_handler_process(struct modem_cmd_handler *handler,
+			      struct modem_iface *iface)
+{
+	/* Process and handle waiting data */
+	handler->process(handler, iface);
 }

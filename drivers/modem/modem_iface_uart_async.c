@@ -148,9 +148,9 @@ int modem_iface_uart_init_dev(struct modem_iface *iface,
 	return rc;
 }
 
-int modem_iface_uart_init(struct modem_iface *iface,
-			  struct modem_iface_uart_data *data,
-			  const struct device *dev)
+int modem_iface_uart_init(struct modem_iface *iface, struct modem_iface_uart_data *data,
+			char *rx_rb_buf, size_t rx_rb_buf_len, const struct device *dev,
+			bool hw_flow_control)
 {
 	int ret;
 
@@ -162,9 +162,12 @@ int modem_iface_uart_init(struct modem_iface *iface,
 	iface->read = modem_iface_uart_async_read;
 	iface->write = modem_iface_uart_async_write;
 
-	ring_buf_init(&data->rx_rb, data->rx_rb_buf_len, data->rx_rb_buf);
+	ring_buf_init(&data->rx_rb, rx_rb_buf_len, rx_rb_buf);
 	k_sem_init(&data->rx_sem, 0, 1);
 	k_sem_init(&data->tx_sem, 0, 1);
+
+	/* Configure hardware flow control */
+	data->hw_flow_control = hw_flow_control;
 
 	/* get UART device */
 	ret = modem_iface_uart_init_dev(iface, dev);

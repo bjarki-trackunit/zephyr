@@ -266,15 +266,54 @@ int modem_cmd_handler_setup_cmds_nolock(struct modem_iface *iface,
 					k_timeout_t timeout);
 
 /**
- * @brief  Init command handler
+ * @brief Initialize modem command handler structure
  *
- * @param  *handler: command handler to initialize
- * @param  *data: command handler data to use
+ * @details All arguments passed to this function except for the alloc_timeout
+ * must persist as long as the command handler itself. The function must only
+ * be called once per command handler and must be called before any incoming
+ * data is processed.
  *
- * @retval 0 if ok, < 0 if error.
+ * @param handler Command handler to initalize
+ * @param data Command handler data to use
+ * @param match_buf Buffer used for matching commands
+ * @param match_buf_len Length of buffer used for matching commands
+ * @param buf_pool Initialized buffer pool used to store incomming data
+ * @param alloc_timeout Timeout for allocating data in buffer pool
+ * @param eol End of line represented as string
+ * @param user_data Free to use data which can be retrieved from within command handlers
+ *
+ * @return -EINVAL if any argument is invalid, 0 if successful
  */
-int modem_cmd_handler_init(struct modem_cmd_handler *handler,
-			   struct modem_cmd_handler_data *data);
+int modem_cmd_handler_init(struct modem_cmd_handler *handler, struct modem_cmd_handler_data *data,
+			      char *match_buf, size_t match_buf_len, struct net_buf_pool *buf_pool,
+			      k_timeout_t alloc_timeout, const char *eol, void *user_data);
+
+/**
+ * @brief Set response and unsolicitet command handlers
+ *
+ * @details These command handlers handle generic commands that are expected
+ * to occur regularly. The response commands include "OK", "ERR" and similar.
+ * Unsolicitet commands can be described as async events, like "RDY",
+ * "SOCKET CLOSED" etc. For commands which are used during synchronous interactions
+ * with the modem, see @ref modem_cmd_handler_update_cmds
+ *
+ * @note These command handlers must persist as long as the command handler itself
+ *
+ * @note The function should only be called once pr command handler and must
+ * be called after @ref modem_cmd_handler_init and before any rx data is processed
+ * if used.
+ *
+ * @param handler Command handler for which to set the commands
+ * @param response_cmds Array of response command handlers
+ * @param response_cmds_len Length of response command handlers array
+ * @param unsol_cmds Array of unsolicitet command handlers
+ * @param unsol_cmds_len Lenght of unsolicitet command handlers array
+ *
+ * @return -EINVAL if any argument is invalid, 0 if successful
+ */
+int modem_cmd_handler_init_cmds(struct modem_cmd_handler *handler,
+			      const struct modem_cmd *response_cmds, size_t response_cmds_len,
+			      const struct modem_cmd *unsol_cmds, size_t unsol_cmds_len);
 
 /**
  * @brief  Lock the modem for sending cmds
@@ -299,6 +338,28 @@ int modem_cmd_handler_tx_lock(struct modem_cmd_handler *handler,
  */
 void modem_cmd_handler_tx_unlock(struct modem_cmd_handler *handler);
 
+/**
+ * @brief  Process commands using modem command handler
+ *
+ * @param  *handler: command handler to unlock
+ */
+
+/**
+ * @brief Process incomming data
+ *
+ * @details This function will process any data available from the interface
+ * using the command handler. The command handler will invoke any matching modem
+ * command which has been registered using @ref modem_cmd_handler_init_cmds or
+ * @ref modem_cmd_handler_update_cmds. Once handled, the function will return.
+ *
+ * @note This function should be invoked from a dedicated thread, which only handles
+ * commands.
+ *
+ * @param handler The handler wich will handle the command when processed
+ * @param iface The interface which receives incoming data
+ */
+void modem_cmd_handler_process(struct modem_cmd_handler *handler,
+			      struct modem_iface *iface);
 
 #ifdef __cplusplus
 }

@@ -143,7 +143,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr, socklen_t add
 		return -EAGAIN;
 	}
 
-	if (sock->id < mdata.socket_config.base_socket_num - 1) {
+	if (!modem_socket_is_allocated(&mdata.socket_config, sock)) {
 		LOG_ERR("Invalid socket id %d from fd %d", sock->id, sock->sock_fd);
 		errno = EINVAL;
 		return -1;
@@ -172,7 +172,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr, socklen_t add
 		return -1;
 	}
 
-	ret = snprintk(buf, sizeof(buf), "AT+CAOPEN=%d,%d,\"%s\",\"%s\",%d", 0, sock->sock_fd,
+	ret = snprintk(buf, sizeof(buf), "AT+CAOPEN=%d,%d,\"%s\",\"%s\",%d", 0, sock->id,
 		       protocol, ip_str, dst_port);
 	if (ret < 0) {
 		LOG_ERR("Failed to build connect command. ID: %d, FD: %d", sock->id, sock->sock_fd);
@@ -244,7 +244,7 @@ static ssize_t offload_sendto(void *obj, const void *buf, size_t len, int flags,
 		len = MDM_MAX_DATA_LENGTH;
 	}
 
-	ret = snprintk(send_buf, sizeof(send_buf), "AT+CASEND=%d,%ld", sock->sock_fd, (long)len);
+	ret = snprintk(send_buf, sizeof(send_buf), "AT+CASEND=%d,%ld", sock->id, (long)len);
 	if (ret < 0) {
 		LOG_ERR("Failed to build send command!!");
 		errno = ENOMEM;
@@ -409,7 +409,7 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t max_len, int flags,
 	}
 
 	max_len = (max_len > MDM_MAX_DATA_LENGTH) ? MDM_MAX_DATA_LENGTH : max_len;
-	snprintk(sendbuf, sizeof(sendbuf), "AT+CARECV=%d,%zd", sock->sock_fd, max_len);
+	snprintk(sendbuf, sizeof(sendbuf), "AT+CARECV=%d,%zd", sock->id, max_len);
 
 	memset(&sock_data, 0, sizeof(sock_data));
 	sock_data.recv_buf = buf;
@@ -501,7 +501,7 @@ static void socket_close(struct modem_socket *sock)
 	char buf[sizeof("AT+CACLOSE=##")];
 	int ret;
 
-	snprintk(buf, sizeof(buf), "AT+CACLOSE=%d", sock->sock_fd);
+	snprintk(buf, sizeof(buf), "AT+CACLOSE=%d", sock->id);
 
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, buf, &mdata.sem_response,
 			     MDM_CMD_TIMEOUT);
@@ -541,8 +541,8 @@ static int offload_close(void *obj)
 		return -EAGAIN;
 	}
 
-	/* Make sure we assigned an id */
-	if (sock->id < mdata.socket_config.base_socket_num) {
+	/* Make sure socket is allocated */
+	if (!modem_socket_is_allocated(&mdata.socket_config, sock)) {
 		return 0;
 	}
 
@@ -2337,10 +2337,8 @@ static int modem_init(const struct device *dev)
 	mdata.sms_buffer_pos = 0;
 
 	/* Socket config. */
-	mdata.socket_config.sockets = &mdata.sockets[0];
-	mdata.socket_config.sockets_len = ARRAY_SIZE(mdata.sockets);
-	mdata.socket_config.base_socket_num = MDM_BASE_SOCKET_NUM;
-	ret = modem_socket_init(&mdata.socket_config, &offload_socket_fd_op_vtable);
+	ret = modem_socket_init(&mdata.socket_config, &mdata.sockets[0], ARRAY_SIZE(mdata.sockets),
+			   MDM_BASE_SOCKET_NUM, true, &offload_socket_fd_op_vtable);
 	if (ret < 0) {
 		goto error;
 	}
@@ -2348,24 +2346,23 @@ static int modem_init(const struct device *dev)
 	change_state(SIM7080_STATE_INIT);
 
 	/* Command handler. */
-	mdata.cmd_handler_data.cmds[CMD_RESP] = response_cmds;
-	mdata.cmd_handler_data.cmds_len[CMD_RESP] = ARRAY_SIZE(response_cmds);
-	mdata.cmd_handler_data.cmds[CMD_UNSOL] = unsolicited_cmds;
-	mdata.cmd_handler_data.cmds_len[CMD_UNSOL] = ARRAY_SIZE(unsolicited_cmds);
-	mdata.cmd_handler_data.match_buf = &mdata.cmd_match_buf[0];
-	mdata.cmd_handler_data.match_buf_len = sizeof(mdata.cmd_match_buf);
-	mdata.cmd_handler_data.buf_pool = &mdm_recv_pool;
-	mdata.cmd_handler_data.alloc_timeout = BUF_ALLOC_TIMEOUT;
-	mdata.cmd_handler_data.eol = "\r\n";
-	ret = modem_cmd_handler_init(&mctx.cmd_handler, &mdata.cmd_handler_data);
+	ret = modem_cmd_handler_init(&mctx.cmd_handler, &mdata.cmd_handler_data,
+		&mdata.cmd_match_buf[0], sizeof(mdata.cmd_match_buf), &mdm_recv_pool,
+		BUF_ALLOC_TIMEOUT, "\r\n", NULL);
+	if (ret < 0) {
+		goto error;
+	}
+
+	/* Command handler commands. */
+	ret = modem_cmd_handler_init_cmds(&mctx.cmd_handler, response_cmds,
+		ARRAY_SIZE(response_cmds), unsolicited_cmds, ARRAY_SIZE(unsolicited_cmds));
 	if (ret < 0) {
 		goto error;
 	}
 
 	/* Uart handler. */
-	mdata.iface_data.rx_rb_buf = &mdata.iface_rb_buf[0];
-	mdata.iface_data.rx_rb_buf_len = sizeof(mdata.iface_rb_buf);
-	ret = modem_iface_uart_init(&mctx.iface, &mdata.iface_data, MDM_UART_DEV);
+	ret = modem_iface_uart_init(&mctx.iface, &mdata.iface_data, &mdata.iface_rb_buf[0],
+		sizeof(mdata.iface_rb_buf), MDM_UART_DEV, DT_PROP(MDM_UART_NODE, hw_flow_control));
 	if (ret < 0) {
 		goto error;
 	}
