@@ -1,0 +1,8 @@
+# Copyright (c) 2022 Bjarki Arge Andreasen
+# SPDX-License-Identifier: Apache-2.0
+
+tests:
+  drivers.rtcc.rtcc_api:
+    tags: drivers rtcc api userspace
+    filter: dt_alias_exists("rtcc")
+    depends_on: rtcc
