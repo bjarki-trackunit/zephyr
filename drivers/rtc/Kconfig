@@ -1,0 +1,11 @@
+# Copyright (c) 2022 Bjarki Arge Andreasen
+# SPDX-License-Identifier: Apache-2.0
+
+config RTC
+	bool "RTC driver support"
+
+if RTC
+
+source "drivers/rtc/Kconfig.rtc_emul"
+
+endif
