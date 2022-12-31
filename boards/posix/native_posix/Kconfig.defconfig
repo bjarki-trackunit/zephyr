@@ -69,4 +69,18 @@ config EMUL
 
 endif # I2C
 
+if RTC
+
+config RTC_EMUL
+	default y
+
+endif # RTC
+
+if RTCC
+
+config RTCC_EMUL
+	default y
+
+endif # RTCC
+
 endif # BOARD_NATIVE_POSIX
