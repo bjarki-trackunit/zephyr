@@ -1,0 +1,31 @@
+# Copyright (c) 2022 Bjarki Arge Andreasen
+# SPDX-License-Identifier: Apache-2.0
+
+description: Atmel SAM family RTCC device
+
+compatible: "atmel,sam-rtcc"
+
+include: rtcc-device.yaml
+
+properties:
+  reg:
+    required: true
+
+  wp-reg:
+    type: int
+    description: Address of write protection mode register (WPMR)
+    required: true
+
+  interrupts:
+    required: true
+
+  peripheral-id:
+    type: int
+    description: peripheral ID
+    required: true
+
+  alarms-count:
+    default: 1
+
+  timestamps-count:
+    default: 0

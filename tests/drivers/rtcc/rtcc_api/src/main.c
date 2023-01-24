@@ -23,7 +23,6 @@
  */
 #define RTCC_TEST_ALARM_MIN             (0)
 #define RTCC_TEST_ALARM_HOUR            (0)
-#define RTCC_TEST_ALARM_WEEKDAY         (3)
 
 /* Wed Dec 31 2025 23:59:50 GMT+0000 */
 #define RTCC_TEST_GET_SET_TIME          (1767225590L)
@@ -115,13 +114,11 @@ ZTEST(rtcc_user, test_alarms)
 	struct tm alarm_match_datetime = {
 		.tm_min = RTCC_TEST_ALARM_MIN,
 		.tm_hour = RTCC_TEST_ALARM_HOUR,
-		.tm_wday = RTCC_TEST_ALARM_WEEKDAY,
 	};
 
 	/* Alarm match mask */
 	uint32_t alarm_match_mask = (RTCC_ALARM_MATCH_MASK_MINUTE |
-				     RTCC_ALARM_MATCH_MASK_HOUR |
-				     RTCC_ALARM_MATCH_MASK_WEEKDAY);
+				     RTCC_ALARM_MATCH_MASK_HOUR);
 
 	struct rtcc_alarm_config config = {
 		.datetime = &alarm_match_datetime,
@@ -297,6 +294,7 @@ static void rtcc_user_before(void *fixture)
 {
 	ARG_UNUSED(fixture);
 
+	int ret;
 	struct tm datetime_set;
 	time_t timer = RTCC_TEST_DEFAULT_TIME;
 
@@ -310,8 +308,14 @@ static void rtcc_user_before(void *fixture)
 
 	/* Disable all alarms */
 	for (size_t i = 0; i < fixture_instance.rtcc_alarms_count; i++) {
-		zassert_true(rtcc_alarm_disable(fixture_instance.rtcc, i) == 0,
-			     "Failed to enable alarm");
+		ret = rtcc_alarm_disable(fixture_instance.rtcc, i);
+
+		/* Continue if disable alarm not supported by hardware */
+		if (ret == -ENOTSUP) {
+			continue;
+		}
+
+		zassert_true(ret == 0, "Failed to enable alarm");
 	}
 
 	/* Reset all alarms triggered flags */

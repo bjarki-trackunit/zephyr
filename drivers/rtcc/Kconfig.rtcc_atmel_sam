@@ -1,0 +1,7 @@
+# Copyright (c) 2022 Bjarki Arge Andreasen
+# SPDX-License-Identifier: Apache-2.0
+
+config RTCC_ATMEL_SAM
+	bool "RTCC (RTC) driver for the ATMEL SAM family"
+	help
+	  Tested on ATSAM4E16C

@@ -241,6 +241,15 @@
 			peripheral-id = <8>;
 			status = "disabled";
 		};
+
+		rtcc: rtcc@400E1860 {
+			compatible = "atmel,sam-rtcc";
+			reg = <0x400E1860 0x100>;
+			wp-reg = <0x400E18E4>;
+			interrupts = <2 0>;
+			peripheral-id = <2>;
+			status = "disabled";
+		};
 	};
 };
 

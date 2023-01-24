@@ -8,4 +8,6 @@ if RTCC
 
 source "drivers/rtcc/Kconfig.rtcc_emul"
 
+source "drivers/rtcc/Kconfig.rtcc_atmel_sam"
+
 endif

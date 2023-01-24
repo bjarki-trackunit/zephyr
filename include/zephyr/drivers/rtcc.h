@@ -36,8 +36,9 @@ extern "C" {
 #define RTCC_ALARM_MATCH_MASK_MINUTE    BIT(1)
 #define RTCC_ALARM_MATCH_MASK_HOUR      BIT(2)
 #define RTCC_ALARM_MATCH_MASK_WEEKDAY   BIT(3)
-#define RTCC_ALARM_MATCH_MASK_MONTH     BIT(4)
-#define RTCC_ALARM_MATCH_MASK_YEAR      BIT(5)
+#define RTCC_ALARM_MATCH_MASK_MONTHDAY  BIT(4)
+#define RTCC_ALARM_MATCH_MASK_MONTH     BIT(5)
+#define RTCC_ALARM_MATCH_MASK_YEAR      BIT(6)
 /**
  * @}
  */
@@ -153,6 +154,18 @@ typedef int (*rtcc_api_timestamp_get)(const struct device *dev, size_t id, struc
 typedef int (*rtcc_api_timestamp_clear)(const struct device *dev, size_t id);
 
 /**
+ * @typedef rtcc_calibration_set
+ * @brief API for setting RTCC calibration
+ */
+typedef int (*rtcc_api_calibration_set)(const struct device *dev, int32_t correction);
+
+/**
+ * @typedef rtcc_calibration_get
+ * @brief API for getting RTCC calibration
+ */
+typedef int (*rtcc_api_calibration_get)(const struct device *dev, int32_t *correction);
+
+/**
  * @brief RTCC driver API
  */
 __subsystem struct rtcc_driver_api {
@@ -166,6 +179,8 @@ __subsystem struct rtcc_driver_api {
 	rtcc_api_alarm_triggered_clear alarm_triggered_clear;
 	rtcc_api_timestamp_get timestamp_get;
 	rtcc_api_timestamp_clear timestamp_clear;
+        rtcc_api_calibration_set calibration_set;
+        rtcc_api_calibration_get calibration_get;
 };
 
 /**
@@ -402,6 +417,26 @@ static inline int z_impl_rtcc_timestamp_clear(const struct device *dev, size_t i
 		(const struct rtcc_driver_api *)dev->api;
 
 	return api->timestamp_clear(dev, id);
+}
+
+__syscall int rtcc_calibration_set(const struct device *dev, int32_t correction);
+
+static inline int z_impl_rtcc_calibration_set(const struct device *dev, int32_t correction)
+{
+	const struct rtcc_driver_api *api =
+		(const struct rtcc_driver_api *)dev->api;
+
+	return api->calibration_set(dev, correction);
+}
+
+__syscall int rtcc_calibration_get(const struct device *dev, int32_t *correction);
+
+static inline int z_impl_rtcc_calibration_get(const struct device *dev, int32_t *correction)
+{
+	const struct rtcc_driver_api *api =
+		(const struct rtcc_driver_api *)dev->api;
+
+	return api->calibration_get(dev, correction);
 }
 
 /**
