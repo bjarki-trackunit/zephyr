@@ -208,7 +208,7 @@ extern "C" {
 
 /**
  * @brief RTC DS3231 Driver-Specific API
- * @defgroup rtc_interface Real Time Clock interfaces
+ * @defgroup rtc_interface RTC Interface
  * @ingroup io_interfaces
  * @{
  */
