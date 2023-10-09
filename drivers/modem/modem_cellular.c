@@ -1458,6 +1458,43 @@ MODEM_CHAT_SCRIPT_DEFINE(swir_hl7800_dial_chat_script, swir_hl7800_dial_chat_scr
 			 dial_abort_matches, modem_cellular_chat_callback_handler, 10);
 #endif
 
+#if DT_HAS_COMPAT_STATUS_OKAY(telit_me910g1)
+MODEM_CHAT_SCRIPT_CMDS_DEFINE(telit_me910g1_init_chat_script_cmds,
+			      MODEM_CHAT_SCRIPT_CMD_RESP_NONE("AT", 100),
+			      MODEM_CHAT_SCRIPT_CMD_RESP_NONE("AT", 100),
+			      MODEM_CHAT_SCRIPT_CMD_RESP_NONE("AT", 100),
+			      MODEM_CHAT_SCRIPT_CMD_RESP_NONE("AT", 100),
+			      MODEM_CHAT_SCRIPT_CMD_RESP("ATE0", ok_match),
+			      MODEM_CHAT_SCRIPT_CMD_RESP("AT+CFUN=4", ok_match),
+			      MODEM_CHAT_SCRIPT_CMD_RESP("AT+CMEE=1", ok_match),
+			      MODEM_CHAT_SCRIPT_CMD_RESP("AT+CREG=1", ok_match),
+			      MODEM_CHAT_SCRIPT_CMD_RESP("AT+CGREG=1", ok_match),
+			      MODEM_CHAT_SCRIPT_CMD_RESP("AT+CEREG=1", ok_match),
+			      MODEM_CHAT_SCRIPT_CMD_RESP("AT+CREG?", ok_match),
+			      MODEM_CHAT_SCRIPT_CMD_RESP("AT+CEREG?", ok_match),
+			      MODEM_CHAT_SCRIPT_CMD_RESP("AT+CGREG?", ok_match),
+			      MODEM_CHAT_SCRIPT_CMD_RESP("AT+CGSN", imei_match),
+			      MODEM_CHAT_SCRIPT_CMD_RESP("", ok_match),
+			      MODEM_CHAT_SCRIPT_CMD_RESP("AT+CGMM", cgmm_match),
+			      MODEM_CHAT_SCRIPT_CMD_RESP("", ok_match)
+			      MODEM_CHAT_SCRIPT_CMD_RESP("AT+CFUN=1", ok_match),
+			      MODEM_CHAT_SCRIPT_CMD_RESP_NONE("AT+CMUX=0,0,5,127,10,3,30,10,2",
+							      300));
+
+MODEM_CHAT_SCRIPT_DEFINE(telit_me910g1_init_chat_script, telit_me910g1_init_chat_script_cmds,
+			 abort_matches, modem_cellular_chat_callback_handler, 10);
+
+MODEM_CHAT_SCRIPT_CMDS_DEFINE(telit_me910g1_dial_chat_script_cmds,
+			      MODEM_CHAT_SCRIPT_CMD_RESP_MULT("AT+CGACT=0,1", allow_match),
+			      MODEM_CHAT_SCRIPT_CMD_RESP("AT+CGDCONT=1,\"IP\","
+							 "\""CONFIG_MODEM_CELLULAR_APN"\"",
+							 ok_match),
+			      MODEM_CHAT_SCRIPT_CMD_RESP_NONE("ATD*99***1#", 0),);
+
+MODEM_CHAT_SCRIPT_DEFINE(telit_me910g1_dial_chat_script, telit_me910g1_dial_chat_script_cmds,
+			 dial_abort_matches, modem_cellular_chat_callback_handler, 10);
+#endif
+
 #define MODEM_CELLULAR_INST_NAME(name, inst) \
 	_CONCAT(_CONCAT(_CONCAT(name, _), DT_DRV_COMPAT), inst)
 
@@ -1505,5 +1542,9 @@ DT_INST_FOREACH_STATUS_OKAY(MODEM_CELLULAR_DEVICE)
 #undef DT_DRV_COMPAT
 
 #define DT_DRV_COMPAT swir_hl7800
+DT_INST_FOREACH_STATUS_OKAY(MODEM_CELLULAR_DEVICE)
+#undef DT_DRV_COMPAT
+
+#define DT_DRV_COMPAT telit_me910g1
 DT_INST_FOREACH_STATUS_OKAY(MODEM_CELLULAR_DEVICE)
 #undef DT_DRV_COMPAT
