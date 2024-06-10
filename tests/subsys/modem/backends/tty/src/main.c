@@ -80,6 +80,9 @@ static void modem_pipe_callback_handler(struct modem_pipe *pipe, enum modem_pipe
 	case MODEM_PIPE_EVENT_CLOSED:
 		atomic_set_bit(&tty_pipe_events, TEST_MODEM_BACKEND_TTY_PIPE_EVENT_CLOSED_BIT);
 		break;
+
+	default:
+		break;
 	}
 }
 

@@ -26,6 +26,7 @@ enum modem_pipe_event {
 	MODEM_PIPE_EVENT_OPENED = 0,
 	MODEM_PIPE_EVENT_RECEIVE_READY,
 	MODEM_PIPE_EVENT_TRANSMIT_IDLE,
+	MODEM_PIPE_EVENT_LOCKED,
 	MODEM_PIPE_EVENT_CLOSED,
 };
 
@@ -52,12 +53,18 @@ typedef int (*modem_pipe_api_transmit)(void *data, const uint8_t *buf, size_t si
 
 typedef int (*modem_pipe_api_receive)(void *data, uint8_t *buf, size_t size);
 
+typedef int (*modem_pipe_api_lock)(void *data);
+
+typedef void (*modem_pipe_api_unlock)(void *data);
+
 typedef int (*modem_pipe_api_close)(void *data);
 
 struct modem_pipe_api {
 	modem_pipe_api_open open;
 	modem_pipe_api_transmit transmit;
 	modem_pipe_api_receive receive;
+	modem_pipe_api_lock lock;
+	modem_pipe_api_unlock unlock;
 	modem_pipe_api_close close;
 };
 
@@ -154,6 +161,39 @@ int modem_pipe_transmit(struct modem_pipe *pipe, const uint8_t *buf, size_t size
 int modem_pipe_receive(struct modem_pipe *pipe, uint8_t *buf, size_t size);
 
 /**
+ * @brief Lock pipe
+ *
+ * @details Used to synchronize access to a shared pipe.
+ *
+ * @param pipe Pipe instance
+ * @param timeout Timeout waiting for lock
+ *
+ * @retval 0 if successful
+ * @retval -errno code otherwise
+ */
+int modem_pipe_lock(struct modem_pipe *pipe, k_timeout_t timeout);
+
+/**
+ * @brief Lock pipe asynchronously
+ *
+ * @param pipe Pipe instance
+ *
+ * @note The MODEM_PIPE_EVENT_LOCKED event is invoked immediately if pipe is
+ * already locked.
+ *
+ * @retval 0 if successful
+ * @retval -errno code otherwise
+ */
+int modem_pipe_lock_async(struct modem_pipe *pipe);
+
+/**
+ * @brief Unlock pipe
+ *
+ * @param pipe Pipe instance
+ */
+void modem_pipe_unlock(struct modem_pipe *pipe);
+
+/**
  * @brief Clear callback
  *
  * @param pipe Pipe instance
@@ -227,6 +267,15 @@ void modem_pipe_notify_receive_ready(struct modem_pipe *pipe);
  * @note Invoked from instance which initialized the pipe instance
  */
 void modem_pipe_notify_transmit_idle(struct modem_pipe *pipe);
+
+/**
+ * @brief Notify user of pipe that pipe has been locked
+ *
+ * @param pipe Pipe instance
+ *
+ * @note Invoked from instance which initialized the pipe instance
+ */
+void modem_pipe_notify_locked(struct modem_pipe *pipe);
 
 /**
  * @endcond

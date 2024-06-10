@@ -16,7 +16,8 @@
 #define TEST_MODEM_PIPE_EVENT_OPENED_BIT        0
 #define TEST_MODEM_PIPE_EVENT_TRANSMIT_IDLE_BIT 1
 #define TEST_MODEM_PIPE_EVENT_RECEIVE_READY_BIT 2
-#define TEST_MODEM_PIPE_EVENT_CLOSED_BIT        3
+#define TEST_MODEM_PIPE_EVENT_LOCKED_BIT        3
+#define TEST_MODEM_PIPE_EVENT_CLOSED_BIT        4
 #define TEST_MODEM_PIPE_NOTIFY_TIMEOUT          K_MSEC(10)
 #define TEST_MODEM_PIPE_WAIT_TIMEOUT            K_MSEC(20)
 
@@ -194,6 +195,10 @@ static void modem_pipe_fake_handler(struct modem_pipe *pipe, enum modem_pipe_eve
 
 	case MODEM_PIPE_EVENT_TRANSMIT_IDLE:
 		atomic_set_bit(&test_state, TEST_MODEM_PIPE_EVENT_TRANSMIT_IDLE_BIT);
+		break;
+
+	case MODEM_PIPE_EVENT_LOCKED:
+		atomic_set_bit(&test_state, TEST_MODEM_PIPE_EVENT_LOCKED_BIT);
 		break;
 
 	case MODEM_PIPE_EVENT_CLOSED:

@@ -10,6 +10,7 @@
 #define PIPE_EVENT_CLOSED_BIT        BIT(1)
 #define PIPE_EVENT_RECEIVE_READY_BIT BIT(2)
 #define PIPE_EVENT_TRANSMIT_IDLE_BIT BIT(3)
+#define PIPE_EVENT_LOCKED_BIT        BIT(4)
 
 static void pipe_set_callback(struct modem_pipe *pipe,
 			      modem_pipe_api_callback callback,
@@ -72,6 +73,40 @@ static int pipe_call_receive(struct modem_pipe *pipe, uint8_t *buf, size_t size)
 	return pipe->api->receive(pipe->data, buf, size);
 }
 
+static void pipe_call_default_lock(struct modem_pipe *pipe)
+{
+	pipe_post_events(pipe, PIPE_EVENT_LOCKED_BIT);
+	pipe_call_callback(pipe, MODEM_PIPE_EVENT_LOCKED);
+}
+
+static int pipe_call_lock(struct modem_pipe *pipe)
+{
+	int ret;
+
+	if (pipe->api->lock != NULL) {
+		ret = pipe->api->lock(pipe->data);
+	} else {
+		pipe_call_default_lock(pipe);
+		ret = 0;
+	}
+
+	return ret;
+}
+
+static void pipe_call_default_unlock(struct modem_pipe *pipe)
+{
+	pipe_clear_events(pipe, PIPE_EVENT_LOCKED_BIT);
+}
+
+static void pipe_call_unlock(struct modem_pipe *pipe)
+{
+	if (pipe->api->unlock != NULL) {
+		pipe->api->unlock(pipe->data);
+	} else {
+		pipe_call_default_unlock(pipe);
+	}
+}
+
 static int pipe_call_close(struct modem_pipe *pipe)
 {
 	return pipe->api->close(pipe->data);
@@ -131,6 +166,10 @@ void modem_pipe_attach(struct modem_pipe *pipe, modem_pipe_api_callback callback
 	if (pipe_test_events(pipe, PIPE_EVENT_TRANSMIT_IDLE_BIT)) {
 		pipe_call_callback(pipe, MODEM_PIPE_EVENT_TRANSMIT_IDLE);
 	}
+
+	if (pipe_test_events(pipe, PIPE_EVENT_LOCKED_BIT)) {
+		pipe_call_callback(pipe, MODEM_PIPE_EVENT_LOCKED);
+	}
 }
 
 int modem_pipe_transmit(struct modem_pipe *pipe, const uint8_t *buf, size_t size)
@@ -151,6 +190,55 @@ int modem_pipe_receive(struct modem_pipe *pipe, uint8_t *buf, size_t size)
 
 	pipe_clear_events(pipe, PIPE_EVENT_RECEIVE_READY_BIT);
 	return pipe_call_receive(pipe, buf, size);
+}
+
+int modem_pipe_lock(struct modem_pipe *pipe, k_timeout_t timeout)
+{
+	int ret;
+
+	if (!pipe_test_events(pipe, PIPE_EVENT_OPENED_BIT)) {
+		return -EPERM;
+	}
+
+	if (pipe_test_events(pipe, PIPE_EVENT_LOCKED_BIT)) {
+		return 0;
+	}
+
+	ret = pipe_call_lock(pipe);
+	if (ret < 0) {
+		return ret;
+	}
+
+	if (!pipe_await_events(pipe, PIPE_EVENT_LOCKED_BIT, timeout)) {
+		return -EAGAIN;
+	}
+
+	return 0;
+}
+
+int modem_pipe_lock_async(struct modem_pipe *pipe)
+{
+	if (!pipe_test_events(pipe, PIPE_EVENT_OPENED_BIT)) {
+		return -EPERM;
+	}
+
+	if (pipe_test_events(pipe, PIPE_EVENT_LOCKED_BIT)) {
+		pipe_call_callback(pipe, MODEM_PIPE_EVENT_LOCKED);
+		return 0;
+	}
+
+	return pipe_call_lock(pipe);
+}
+
+void modem_pipe_unlock(struct modem_pipe *pipe)
+{
+	if (!pipe_test_events(pipe, PIPE_EVENT_OPENED_BIT) ||
+	    !pipe_test_events(pipe, PIPE_EVENT_LOCKED_BIT)) {
+		return;
+	}
+
+	pipe_call_unlock(pipe);
+	pipe_clear_events(pipe, PIPE_EVENT_LOCKED_BIT);
 }
 
 void modem_pipe_release(struct modem_pipe *pipe)
@@ -211,4 +299,10 @@ void modem_pipe_notify_transmit_idle(struct modem_pipe *pipe)
 {
 	pipe_post_events(pipe, PIPE_EVENT_TRANSMIT_IDLE_BIT);
 	pipe_call_callback(pipe, MODEM_PIPE_EVENT_TRANSMIT_IDLE);
+}
+
+void modem_pipe_notify_locked(struct modem_pipe *pipe)
+{
+	pipe_post_events(pipe, PIPE_EVENT_LOCKED_BIT);
+	pipe_call_callback(pipe, MODEM_PIPE_EVENT_LOCKED);
 }
