@@ -29,6 +29,7 @@ struct modem_backend_fake {
 
 	struct k_work_delayable opened_dwork;
 	struct k_work_delayable transmit_idle_dwork;
+	struct k_work_delayable locked_dwork;
 	struct k_work_delayable closed_dwork;
 
 	const uint8_t *transmit_buffer;
@@ -41,6 +42,8 @@ struct modem_backend_fake {
 	uint8_t open_called : 1;
 	uint8_t transmit_called : 1;
 	uint8_t receive_called : 1;
+	uint8_t lock_called : 1;
+	uint8_t unlock_called : 1;
 	uint8_t close_called : 1;
 };
 
@@ -104,6 +107,37 @@ static int modem_backend_fake_receive(void *data, uint8_t *buf, size_t size)
 	return size;
 }
 
+static void modem_backend_fake_locked_handler(struct k_work *item)
+{
+	struct k_work_delayable *dwork = k_work_delayable_from_work(item);
+	struct modem_backend_fake *backend =
+		CONTAINER_OF(dwork, struct modem_backend_fake, locked_dwork);
+
+	modem_pipe_notify_locked(&backend->pipe);
+}
+
+static int modem_backend_fake_lock(void *data)
+{
+	struct modem_backend_fake *backend = data;
+
+	backend->lock_called = true;
+
+	if (backend->synchronous) {
+		modem_pipe_notify_locked(&backend->pipe);
+	} else {
+		k_work_schedule(&backend->locked_dwork, TEST_MODEM_PIPE_NOTIFY_TIMEOUT);
+	}
+
+	return 0;
+}
+
+static void modem_backend_fake_unlock(void *data)
+{
+	struct modem_backend_fake *backend = data;
+
+	backend->unlock_called = true;
+}
+
 static void modem_backend_fake_closed_handler(struct k_work *item)
 {
 	struct k_work_delayable *dwork = k_work_delayable_from_work(item);
@@ -132,6 +166,8 @@ static struct modem_pipe_api modem_backend_fake_api = {
 	.open = modem_backend_fake_open,
 	.transmit = modem_backend_fake_transmit,
 	.receive = modem_backend_fake_receive,
+	.lock = modem_backend_fake_lock,
+	.unlock = modem_backend_fake_unlock,
 	.close = modem_backend_fake_close,
 };
 
@@ -141,6 +177,8 @@ static struct modem_pipe *modem_backend_fake_init(struct modem_backend_fake *bac
 			      modem_backend_fake_opened_handler);
 	k_work_init_delayable(&backend->transmit_idle_dwork,
 			      modem_backend_fake_transmit_idle_handler);
+	k_work_init_delayable(&backend->locked_dwork,
+			      modem_backend_fake_locked_handler);
 	k_work_init_delayable(&backend->closed_dwork,
 			      modem_backend_fake_closed_handler);
 
@@ -157,6 +195,8 @@ static void modem_backend_fake_reset(struct modem_backend_fake *backend)
 	backend->open_called = false;
 	backend->transmit_called = false;
 	backend->receive_called = false;
+	backend->lock_called = false;
+	backend->unlock_called = false;
 	backend->close_called = false;
 }
 
@@ -297,6 +337,49 @@ static void test_pipe_sync_transmit(void)
 		      "Unexpected state %u", atomic_get(&test_state));
 }
 
+static void test_pipe_async_lock(void)
+{
+	zassert_ok(modem_pipe_lock_async(test_pipe));
+	zassert_true(test_backend.lock_called, "lock was not called");
+	zassert_equal(atomic_get(&test_state), 0, "Unexpected state %u",
+		      atomic_get(&test_state));
+	k_sleep(TEST_MODEM_PIPE_WAIT_TIMEOUT);
+	zassert_equal(atomic_get(&test_state), BIT(TEST_MODEM_PIPE_EVENT_LOCKED_BIT),
+		      "Unexpected state %u", atomic_get(&test_state));
+}
+
+static void test_pipe_sync_lock(void)
+{
+	zassert_ok(modem_pipe_lock_async(test_pipe));
+	zassert_true(test_backend.lock_called, "lock was not called");
+	zassert_equal(atomic_get(&test_state), BIT(TEST_MODEM_PIPE_EVENT_LOCKED_BIT),
+		      "Unexpected state %u", atomic_get(&test_state));
+}
+
+static void test_pipe_unlock_unlocked(void)
+{
+	modem_pipe_unlock(test_pipe);
+	zassert_false(test_backend.unlock_called, "unlock was called");
+	zassert_equal(atomic_get(&test_state), 0, "unexpected state %u",
+		      atomic_get(&test_state));
+}
+
+static void test_pipe_unlock_locked(void)
+{
+	modem_pipe_unlock(test_pipe);
+	zassert_true(test_backend.unlock_called, "unlock was not called");
+	zassert_equal(atomic_get(&test_state), 0, "unexpected state %u",
+		      atomic_get(&test_state));
+}
+
+static void test_pipe_unlock_closed(void)
+{
+	modem_pipe_unlock(test_pipe);
+	zassert_false(test_backend.unlock_called, "unlock was called");
+	zassert_equal(atomic_get(&test_state), 0, "unexpected state %u",
+		      atomic_get(&test_state));
+}
+
 static void test_pipe_attach_receive_not_ready_transmit_idle(void)
 {
 	modem_pipe_attach(test_pipe, modem_pipe_fake_handler, &test_user_data);
@@ -310,6 +393,15 @@ static void test_pipe_attach_receive_ready_transmit_idle(void)
 	zassert_equal(atomic_get(&test_state),
 		      BIT(TEST_MODEM_PIPE_EVENT_TRANSMIT_IDLE_BIT) |
 		      BIT(TEST_MODEM_PIPE_EVENT_RECEIVE_READY_BIT),
+		      "Unexpected state %u", atomic_get(&test_state));
+}
+
+static void test_pipe_attach_locked_transmit_idle(void)
+{
+	modem_pipe_attach(test_pipe, modem_pipe_fake_handler, &test_user_data);
+	zassert_equal(atomic_get(&test_state),
+		      BIT(TEST_MODEM_PIPE_EVENT_TRANSMIT_IDLE_BIT) |
+		      BIT(TEST_MODEM_PIPE_EVENT_LOCKED_BIT),
 		      "Unexpected state %u", atomic_get(&test_state));
 }
 
@@ -329,6 +421,13 @@ static void test_pipe_notify_receive_ready(void)
 {
 	modem_pipe_notify_receive_ready(test_pipe);
 	zassert_equal(atomic_get(&test_state), BIT(TEST_MODEM_PIPE_EVENT_RECEIVE_READY_BIT),
+		      "Unexpected state %u", atomic_get(&test_state));
+}
+
+static void test_pipe_notify_locked(void)
+{
+	modem_pipe_notify_locked(test_pipe);
+	zassert_equal(atomic_get(&test_state), BIT(TEST_MODEM_PIPE_EVENT_LOCKED_BIT),
 		      "Unexpected state %u", atomic_get(&test_state));
 }
 
@@ -370,6 +469,37 @@ ZTEST(modem_pipe, test_sync_transmit)
 	test_pipe_sync_transmit();
 }
 
+ZTEST(modem_pipe, test_async_lock)
+{
+	test_pipe_open();
+	test_reset();
+	test_pipe_async_lock();
+}
+
+ZTEST(modem_pipe, test_sync_lock)
+{
+	modem_backend_fake_set_sync(&test_backend, true);
+	test_pipe_open();
+	test_reset();
+	test_pipe_sync_lock();
+}
+
+ZTEST(modem_pipe, test_unlock)
+{
+	modem_backend_fake_set_sync(&test_backend, true);
+	test_pipe_open();
+	test_reset();
+	test_pipe_unlock_unlocked();
+	test_reset();
+	test_pipe_sync_lock();
+	test_reset();
+	test_pipe_unlock_locked();
+	test_reset();
+	test_pipe_close();
+	test_reset();
+	test_pipe_unlock_closed();
+}
+
 ZTEST(modem_pipe, test_attach)
 {
 	test_pipe_open();
@@ -398,6 +528,26 @@ ZTEST(modem_pipe, test_attach)
 	 */
 	test_reset();
 	test_pipe_receive();
+	test_reset();
+	test_pipe_attach_receive_not_ready_transmit_idle();
+
+	/*
+	 * Notify locked event and expect locked event to be re-invoked every
+	 * time the pipe is attached to.
+	 */
+	test_reset();
+	test_pipe_notify_locked();
+	test_reset();
+	test_pipe_attach_locked_transmit_idle();
+	test_reset();
+	test_pipe_attach_locked_transmit_idle();
+
+	/*
+	 * Unlocking shall clear the locked state, stopping the invocation of locked
+	 * event on attach.
+	 */
+	test_reset();
+	test_pipe_unlock_locked();
 	test_reset();
 	test_pipe_attach_receive_not_ready_transmit_idle();
 }
