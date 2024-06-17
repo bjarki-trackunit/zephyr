@@ -9,8 +9,6 @@
 		test-intd0 = &spi1;
 		test-intd1 = &spi2;
 	};
-
-	soc
 };
 
 &spi1 {
@@ -23,4 +21,8 @@
 
 &nvic {
 	interrupt-lines = <128>;
+};
+
+&exti {
+	interrupt-lines = <16>;
 };

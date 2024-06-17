@@ -19,10 +19,10 @@
 	status = "reserved";
 };
 
-&nvic {
-	interrupt-lines = <128>;
+&rtc1 {
+	status = "reserved";
 };
 
-&exti {
-	interrupt-lines = <16>;
+&nvic {
+	interrupt-lines = <65>;
 };
